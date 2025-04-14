@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(
     name="simple_driving",
@@ -8,5 +8,6 @@ setup(
                       'numpy',
                       'matplotlib',
                       'torch'],
+    packages=find_packages(),
     package_data={'simple_driving': ['resources/*.urdf']}
 )

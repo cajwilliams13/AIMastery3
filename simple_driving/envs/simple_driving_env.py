@@ -8,6 +8,7 @@ from simple_driving.resources.plane import Plane
 from simple_driving.resources.goal import Goal
 import matplotlib.pyplot as plt
 import time
+import os
 
 RENDER_HEIGHT = 720
 RENDER_WIDTH = 960
@@ -84,6 +85,8 @@ class SimpleDrivingEnv(gym.Env):
             #print("reached goal")
             self.done = True
             self.reached_goal = True
+            reward += 50
+            print("Reached goal")
 
         ob = car_ob
         return ob, reward, self.done, dict()
@@ -101,11 +104,36 @@ class SimpleDrivingEnv(gym.Env):
         self.car = Car(self._p)
         self._envStepCounter = 0
 
-        # Set the goal to a random target
-        x = (self.np_random.uniform(5, 9) if self.np_random.integers(2) else
-             self.np_random.uniform(-9, -5))
-        y = (self.np_random.uniform(5, 9) if self.np_random.integers(2) else
-             self.np_random.uniform(-9, -5))
+        #obstacles
+        self.obstacles = []
+        for i in range(3):
+            x = (self.np_random.uniform(1, 9) if self.np_random.integers(2) else self.np_random.uniform(-9, -1))
+            y = (self.np_random.uniform(1, 9) if self.np_random.integers(2) else self.np_random.uniform(-9, -1))
+
+            self.obstacles.append(self._p.loadURDF(fileName=os.path.join(os.path.dirname(__file__), 'obstacle.urdf'), basePosition=[x, y, 0]))
+         #Set the goal to a random target
+        intersecting = True
+
+        x = 0
+        y = 0
+
+        while intersecting:
+
+            x = (self.np_random.uniform(5, 9) if self.np_random.integers(2) else
+                self.np_random.uniform(-9, -5))
+            y = (self.np_random.uniform(5, 9) if self.np_random.integers(2) else
+                self.np_random.uniform(-9, -5))
+            
+            count = 0
+            for obs in self.obstacles:
+                obs_pos, _ = self._p.getBasePositionAndOrientation(obs)
+                if math.sqrt(((obs_pos[0] - x) ** 2 + (obs_pos[1] - y) ** 2)) < 0.7:
+                    break
+                count += 1
+            
+            if count == len(self.obstacles):
+                intersecting = False
+
         self.goal = (x, y)
         self.done = False
         self.reached_goal = False
@@ -182,12 +210,28 @@ class SimpleDrivingEnv(gym.Env):
         goalpos, goalorn = self._p.getBasePositionAndOrientation(self.goal_object.goal)
         invCarPos, invCarOrn = self._p.invertTransform(carpos, carorn)
         goalPosInCar, goalOrnInCar = self._p.multiplyTransforms(invCarPos, invCarOrn, goalpos, goalorn)
+        obs_vec = self._get_closest_obstacle_vector(carpos)
 
         observation = [goalPosInCar[0], goalPosInCar[1]]
-        return observation
+        return np.concatenate([observation, obs_vec])
+        #return observation
 
     def _termination(self):
         return self._envStepCounter > 2000
 
     def close(self):
         self._p.disconnect()
+
+    def _get_closest_obstacle_vector(self, car_pos):
+        min_dist = float('inf')
+        closest_vec = np.array([0.0, 0.0])
+
+        for obs_id in self.obstacles:
+            obs_pos, _ = self._p.getBasePositionAndOrientation(obs_id)
+            vec = np.array([obs_pos[0] - car_pos[0], obs_pos[1] - car_pos[1]])
+            dist = np.linalg.norm(vec)
+            if dist < min_dist:
+                min_dist = dist
+                closest_vec = vec
+
+        return closest_vec
